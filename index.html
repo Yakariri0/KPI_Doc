@@ -1,0 +1,742 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>دمج تقارير الأطباء مع KPI</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+  :root{
+    --bg:#F3F5F6;
+    --panel:#FFFFFF;
+    --border:#DFE3E7;
+    --ink:#16212B;
+    --sub:#5C6773;
+    --accent:#0E6B64;
+    --accent-ink:#ffffff;
+    --accent-soft:#E4F2F0;
+    --amber:#B4560F;
+    --amber-soft:#FDF0E4;
+    --red:#B3261E;
+    --green:#146C2E;
+    --step-inactive:#C6CCD2;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:var(--bg);
+    color:var(--ink);
+    font-family:"IBM Plex Sans Arabic","Segoe UI",Tahoma,sans-serif;
+    line-height:1.55;
+    padding:28px 16px 80px;
+  }
+  .wrap{max-width:960px;margin:0 auto;}
+  header.top{margin-bottom:28px;}
+  header.top h1{font-size:1.5rem;font-weight:700;margin:0 0 6px;letter-spacing:-0.01em;}
+  header.top p{color:var(--sub);margin:0;font-size:0.95rem;max-width:64ch;}
+
+  .steps{display:flex;gap:8px;margin:22px 0 26px;flex-wrap:wrap;}
+  .step-pill{display:flex;align-items:center;gap:8px;padding:7px 12px 7px 14px;border-radius:100px;background:var(--panel);border:1px solid var(--border);font-size:0.82rem;color:var(--sub);}
+  .step-pill.active{border-color:var(--accent);color:var(--accent);background:var(--accent-soft);font-weight:600;}
+  .step-pill .num{width:18px;height:18px;border-radius:50%;background:var(--step-inactive);color:#fff;font-size:0.7rem;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+  .step-pill.active .num{background:var(--accent);}
+
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:22px;margin-bottom:18px;}
+  .card.dim{opacity:0.5;pointer-events:none;}
+  .card h2{font-size:1.05rem;margin:0 0 4px;font-weight:600;}
+  .card .desc{color:var(--sub);font-size:0.87rem;margin:0 0 16px;}
+
+  .drop{border:1.5px dashed var(--border);border-radius:8px;padding:22px;text-align:center;cursor:pointer;transition:border-color .15s,background .15s;background:#FAFBFC;}
+  .drop:hover,.drop.drag{border-color:var(--accent);background:var(--accent-soft);}
+  .drop input{display:none;}
+  .drop .hint{color:var(--sub);font-size:0.82rem;}
+
+  .row{display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;margin-top:14px;}
+  .field{display:flex;flex-direction:column;gap:5px;min-width:120px;}
+  .field label{font-size:0.76rem;color:var(--sub);font-weight:600;}
+  select,input[type=number],input[type=text]{padding:8px 10px;border-radius:6px;border:1px solid var(--border);background:#fff;font-family:inherit;font-size:0.86rem;color:var(--ink);}
+  select:focus,input:focus{outline:2px solid var(--accent);outline-offset:1px;}
+
+  button{font-family:inherit;font-size:0.88rem;font-weight:600;border-radius:7px;padding:10px 18px;border:none;cursor:pointer;transition:filter .15s,transform .05s;}
+  button.primary{background:var(--accent);color:var(--accent-ink);}
+  button.primary:hover{filter:brightness(1.08);}
+  button.primary:disabled{background:var(--step-inactive);cursor:not-allowed;}
+  button.ghost{background:transparent;border:1px solid var(--border);color:var(--ink);}
+  button.ghost:hover{border-color:var(--accent);color:var(--accent);}
+  button.small{padding:5px 10px;font-size:0.76rem;}
+  button:active{transform:scale(.98);}
+
+  table{width:100%;border-collapse:collapse;font-size:0.83rem;}
+  th,td{padding:7px 9px;text-align:right;border-bottom:1px solid var(--border);}
+  th{color:var(--sub);font-weight:600;font-size:0.74rem;position:sticky;top:0;background:var(--panel);}
+  tbody tr:hover{background:#FAFBFC;}
+  .tbl-scroll{max-height:360px;overflow:auto;border:1px solid var(--border);border-radius:8px;margin-top:12px;}
+  .num-cell{font-family:"IBM Plex Mono",monospace;font-variant-numeric:tabular-nums;}
+  .flag-row{background:var(--amber-soft);}
+  .flag-badge{display:inline-block;font-size:0.68rem;font-weight:600;color:var(--amber);background:#FCE3CC;border-radius:4px;padding:1px 6px;margin-inline-end:4px;}
+  .chk{width:16px;height:16px;accent-color:var(--accent);cursor:pointer;}
+  select.cat-select{font-size:0.78rem;padding:4px 6px;min-width:150px;}
+
+  .summary-bar{display:flex;gap:18px;flex-wrap:wrap;margin-top:12px;padding:11px 14px;background:#FAFBFC;border:1px solid var(--border);border-radius:8px;font-size:0.82rem;}
+  .summary-bar b{color:var(--ink);font-family:"IBM Plex Mono",monospace;}
+
+  .diff-up{color:var(--green);}
+  .diff-down{color:var(--red);}
+  .diff-same{color:var(--sub);}
+
+  .actions{display:flex;gap:10px;margin-top:18px;flex-wrap:wrap;}
+
+  .note{font-size:0.8rem;color:var(--sub);background:#F5F7F8;border-inline-start:3px solid var(--accent);padding:8px 12px;border-radius:4px;margin-top:14px;}
+  .error{font-size:0.82rem;color:var(--red);background:#FBEAE9;border-inline-start:3px solid var(--red);padding:8px 12px;border-radius:4px;margin-top:12px;}
+  .success{font-size:0.82rem;color:var(--green);background:#E9F5EC;border-inline-start:3px solid var(--green);padding:8px 12px;border-radius:4px;margin-top:12px;}
+  .warn{font-size:0.82rem;color:var(--amber);background:var(--amber-soft);border-inline-start:3px solid var(--amber);padding:8px 12px;border-radius:4px;margin-top:12px;}
+
+  .sheet-tabs{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px;}
+  .sheet-tab{padding:5px 11px;border-radius:6px;border:1px solid var(--border);background:#fff;font-size:0.78rem;cursor:pointer;color:var(--sub);}
+  .sheet-tab.active{background:var(--ink);color:#fff;border-color:var(--ink);}
+
+  .doctor-card{border:1px solid var(--border);border-radius:9px;padding:16px 18px;margin-bottom:14px;background:#FDFEFE;}
+  .doctor-card .dhead{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;cursor:pointer;}
+  .doctor-card .dtitle{font-weight:600;font-size:0.92rem;}
+  .doctor-card .dsub{color:var(--sub);font-size:0.78rem;}
+  .doctor-card .dbody{margin-top:12px;display:none;}
+  .doctor-card.open .dbody{display:block;}
+  .chev{transition:transform .15s;color:var(--sub);}
+  .doctor-card.open .chev{transform:rotate(180deg);}
+  .remove-x{color:var(--red);font-size:0.78rem;cursor:pointer;background:none;border:none;padding:2px 4px;font-weight:600;}
+
+  .check-pass{color:var(--green);font-weight:600;}
+  .check-fail{color:var(--red);font-weight:600;}
+
+  .grand-total{border:1.5px solid var(--accent);border-radius:9px;padding:16px 18px;margin-top:14px;background:var(--accent-soft);}
+  .grand-total .gt-row{display:flex;justify-content:space-between;font-size:0.88rem;padding:4px 0;}
+  .grand-total .gt-row b{font-family:"IBM Plex Mono",monospace;}
+
+  footer{text-align:center;color:var(--sub);font-size:0.76rem;margin-top:30px;}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="top">
+    <h1>دمج تقارير الأطباء مع ملف KPI</h1>
+    <p>ارفع ملف أو عدة ملفات فحوصات لأطباء متعددين، وملف الـ KPI الموحّد، وراجع الفحوصات المزدوجة (AND / +) قبل الدمج النهائي، ثم نزّل ملف واحد محدّث لكل الأطباء.</p>
+  </header>
+
+  <div class="steps">
+    <div class="step-pill" id="pill-1"><span class="num">1</span> ملفات الأطباء</div>
+    <div class="step-pill" id="pill-2"><span class="num">2</span> ملف KPI</div>
+    <div class="step-pill" id="pill-3"><span class="num">3</span> الحساب والمطابقة</div>
+    <div class="step-pill" id="pill-4"><span class="num">4</span> التنزيل</div>
+  </div>
+
+  <!-- STEP 1 -->
+  <div class="card" id="card-1">
+    <h2>1) ملفات فحوصات الأطباء</h2>
+    <p class="desc">ارفع ملف واحد أو أكثر (xls/xlsx) — كل ملف يحتوي جدول محوري بأعمدة Modality / Summary / Total. يمكنك إضافة ملفات إضافية لاحقاً بنفس الطريقة.</p>
+
+    <div class="drop" id="drop1">
+      <input type="file" id="fileDoc" accept=".xls,.xlsx" multiple>
+      <div>📄 اسحب ملف أو عدة ملفات هنا أو اضغط للاختيار</div>
+      <div class="hint">يمكن اختيار أكثر من ملف مرة واحدة</div>
+    </div>
+
+    <div id="doctorsWrap"></div>
+  </div>
+
+  <!-- STEP 2 -->
+  <div class="card dim" id="card-2">
+    <h2>2) ملف KPI المستهدف</h2>
+    <p class="desc">ارفع ملف KPI_Doctors.xlsx. سيتم اقتراح تبويب مطابق لكل طبيب تلقائياً — راجع الاقتراح وعدّله عند الحاجة.</p>
+
+    <div class="drop" id="drop2">
+      <input type="file" id="fileKpi" accept=".xlsx">
+      <div>📊 اسحب ملف KPI هنا أو اضغط للاختيار</div>
+      <div class="hint" id="fname2">xlsx</div>
+    </div>
+
+    <div id="kpiMatchWrap" style="display:none">
+      <div class="tbl-scroll" id="kpiMatchTableWrap" style="max-height:none;"></div>
+    </div>
+  </div>
+
+  <!-- STEP 3 -->
+  <div class="card dim" id="card-3">
+    <h2>3) الحساب والمطابقة</h2>
+    <p class="desc">لكل طبيب، يتم التحقق أن إجمالي الفحوصات بعد المضاعفة (من الخطوة 1) يساوي إجمالي القيم الجديدة المكتوبة فعلياً في ملف KPI. أي فرق يعني وجود فئة فحوصات بلا صف مطابق في تبويب الطبيب.</p>
+    <div class="actions"><button class="primary" id="btnComputeAll">احسب وطابِق كل الأطباء</button></div>
+    <div id="perDoctorResults"></div>
+    <div class="grand-total" id="grandTotal" style="display:none"></div>
+  </div>
+
+  <!-- STEP 4 -->
+  <div class="card dim" id="card-4">
+    <h2>4) تنزيل الملف المحدث</h2>
+    <p class="desc">سيتم إنشاء نسخة واحدة من ملف KPI مع تحديث تبويب كل طبيب مرفوع، مع الحفاظ على جميع الصيغ والتبويبات الأخرى دون تغيير.</p>
+    <div class="actions"><button class="primary" id="btnDownload">تنزيل ملف KPI المحدث</button></div>
+    <div class="success" id="downloadSuccess" style="display:none"></div>
+  </div>
+
+  <footer>يعمل هذا الأداة بالكامل داخل متصفحك — الملفات لا تُرفع لأي خادم.</footer>
+</div>
+
+<script>
+// ---------- Category list & classification rules ----------
+const CATEGORIES = [
+  "General x-ray","Skeletal survey","Flouroscopy","General US","Pediatric US",
+  "Special US (breast, transrectal,doppler, etc.)","CT brain","CT head & neck","CT chest",
+  "CT abd-pelvis","CTA, CT colonography","CT cardiac","CT MSK","MR brain","MR neck","MR spine",
+  "MR whole spine","MR MSK","MR body","MRA, MR breast","MR cardiac","Mammography","Intervention",
+  "Intervention - neuro","DEXA","General NM","PET-CT"
+];
+function normLabel(s){ return (s||"").toString().trim().toLowerCase().replace(/\s+/g," "); }
+const CAT_NORM = CATEGORIES.map(normLabel);
+
+function classify(modality, summary){
+  const s = (summary||"").toUpperCase();
+  const m = (modality||"").toUpperCase();
+  if(m === "CR"){ if(s.includes("ENTIRE SURVEY")) return "Skeletal survey"; return "General x-ray"; }
+  if(m === "RF") return "Flouroscopy";
+  if(m === "DEXA") return "DEXA";
+  if(m === "MR"){
+    if(s.includes("BRAIN")) return "MR brain";
+    if(s.includes("NECK")) return "MR neck";
+    if(s.includes("WHOLE SPINE")) return "MR whole spine";
+    if(s.includes("SPINE")) return "MR spine";
+    if(s.includes("BREAST") || s.startsWith("MRA")) return "MRA, MR breast";
+    if(s.includes("CARDIAC")) return "MR cardiac";
+    if(s.includes("BODY")) return "MR body";
+    return "MR MSK";
+  }
+  if(m === "CT"){
+    if(s.includes("ANGIOGRAPHY") || s.startsWith("CTA")) return "CTA, CT colonography";
+    if(s.includes("BRAIN")) return "CT brain";
+    if(s.includes("NECK") || s.includes("SINUS") || s.includes("MAXILLOFACIAL")) return "CT head & neck";
+    if(s.includes("CHEST") || s.includes("THORAX")) return "CT chest";
+    if(s.includes("ABDOMEN") || s.includes("PELVIS") || s.includes("ADRENAL") || s==="CT KUB" || s.includes("LIVER")) return "CT abd-pelvis";
+    if(s.includes("CARDIAC")) return "CT cardiac";
+    return "CT MSK";
+  }
+  if(m === "US"){
+    if(s.includes("NEONATAL")) return "Pediatric US";
+    if(s.includes("DOPPLER") || s.includes("BREAST") || s.includes("PROSTATE")) return "Special US (breast, transrectal,doppler, etc.)";
+    return "General US";
+  }
+  if(m === "NM") return "General NM";
+  if(m === "PET" || m === "PET-CT") return "PET-CT";
+  if(m === "MG" || m === "MAMMO") return "Mammography";
+  return CATEGORIES[0];
+}
+function looksDoubled(summary){
+  const s = (summary||"").toUpperCase();
+  if(/\bAND\b/.test(s)) return true;
+  if(s.includes("+")) return true;
+  return false;
+}
+function colLetter(idx){
+  let s = ""; idx += 1;
+  while(idx > 0){ let rem = (idx-1)%26; s = String.fromCharCode(65+rem)+s; idx = Math.floor((idx-1)/26); }
+  return s;
+}
+function escapeHtml(s){ return s.replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function nameTokens(s){
+  return (s||"").replace(/\.[a-zA-Z0-9]+$/,'').replace(/dr\.?/gi,' ')
+    .replace(/[^a-zA-Z\u0600-\u06FF]+/g,' ').trim().toLowerCase().split(/\s+/).filter(Boolean);
+}
+function tokensSimilar(a,b){
+  const shortLen = Math.min(a.length,b.length,4);
+  if(shortLen < 3) return a===b;
+  return a.slice(0,shortLen)===b.slice(0,shortLen);
+}
+function guessKpiSheet(srcName, names){
+  const srcTokens = nameTokens(srcName);
+  if(srcTokens.length===0) return names.find(n=>/dr\.?/i.test(n)) || names[0];
+  let best=null, bestScore=0;
+  names.forEach(n=>{
+    const nTokens = nameTokens(n);
+    let score=0;
+    srcTokens.forEach(st=>{ if(nTokens.some(nt=>tokensSimilar(st,nt))) score++; });
+    if(score>bestScore){ bestScore=score; best=n; }
+  });
+  return bestScore>0 ? best : (names.find(n=>/dr\.?/i.test(n)) || names[0]);
+}
+
+// ---------- State ----------
+let doctors = []; // {id, fileName, wb, sheetsList, sheetName, headerRow, modCol, summCol, totalCol, rows, kpiSheetName, computed}
+let docIdCounter = 0;
+let kpiWB = null, kpiFileName = "";
+
+function activatePill(n){ for(let i=1;i<=4;i++){ document.getElementById('pill-'+i).classList.toggle('active', i===n); } }
+function unlock(cardId){ document.getElementById(cardId).classList.remove('dim'); }
+
+// ---------- Step 1: doctor files ----------
+const drop1 = document.getElementById('drop1');
+const fileDoc = document.getElementById('fileDoc');
+drop1.addEventListener('click', ()=>fileDoc.click());
+['dragover','dragleave','drop'].forEach(evt=>{
+  drop1.addEventListener(evt, e=>{ e.preventDefault(); drop1.classList.toggle('drag', evt==='dragover'); });
+});
+drop1.addEventListener('drop', e=>{ if(e.dataTransfer.files.length) handleDocFiles(e.dataTransfer.files); });
+fileDoc.addEventListener('change', e=>{ if(e.target.files.length) handleDocFiles(e.target.files); fileDoc.value=""; });
+
+function handleDocFiles(fileList){
+  Array.from(fileList).forEach(file=>{
+    const reader = new FileReader();
+    reader.onload = e=>{
+      try{
+        const data = new Uint8Array(e.target.result);
+        const wb = XLSX.read(data, {type:'array'});
+        const doc = {
+          id: 'd'+(++docIdCounter),
+          fileName: file.name,
+          wb,
+          sheetsList: wb.SheetNames,
+          sheetName: null,
+          headerRow: 0, modCol:0, summCol:1, totalCol:2,
+          rows: [],
+          open: true,
+          kpiSheetName: null,
+          computed: null
+        };
+        autoDetectDocSheet(doc);
+        extractDoctorRows(doc);
+        doctors.push(doc);
+        renderDoctors();
+        if(kpiWB){ matchAllDoctorsToKpi(); renderKpiMatchTable(); }
+      }catch(err){
+        alert(`تعذّرت قراءة الملف "${file.name}": ${err.message}`);
+      }
+    };
+    reader.readAsArrayBuffer(file);
+  });
+}
+
+function autoDetectDocSheet(doc){
+  let guessed = doc.sheetsList[0];
+  doc.sheetsList.forEach(name=>{
+    const ws = doc.wb.Sheets[name];
+    const grid = XLSX.utils.sheet_to_json(ws, {header:1, blankrows:false});
+    for(let i=0;i<Math.min(grid.length,30);i++){
+      const rowStr = (grid[i]||[]).join("|").toUpperCase();
+      if(rowStr.includes("SUMMARY") && rowStr.includes("TOTAL")){ guessed = name; break; }
+    }
+  });
+  doc.sheetName = guessed;
+  detectColumnsForSheet(doc);
+}
+
+function detectColumnsForSheet(doc){
+  const ws = doc.wb.Sheets[doc.sheetName];
+  const grid = XLSX.utils.sheet_to_json(ws, {header:1, blankrows:false});
+  let headerRow=0, modCol=0, summCol=1, totalCol=2;
+  for(let i=0;i<Math.min(grid.length,30);i++){
+    const row = grid[i]||[];
+    let sc=-1, tc=-1, mc=-1;
+    row.forEach((cell,ci)=>{
+      const t=(cell||"").toString().trim().toLowerCase();
+      if(t==="summary") sc=ci;
+      if(t==="total") tc=ci;
+      if(t==="modality") mc=ci;
+    });
+    if(sc>=0 && tc>=0){ headerRow=i; summCol=sc; totalCol=tc; modCol=mc>=0?mc:Math.max(sc-1,0); break; }
+  }
+  doc.headerRow=headerRow; doc.modCol=modCol; doc.summCol=summCol; doc.totalCol=totalCol;
+}
+
+function extractDoctorRows(doc){
+  const ws = doc.wb.Sheets[doc.sheetName];
+  const grid = XLSX.utils.sheet_to_json(ws, {header:1, blankrows:false});
+  let rows=[], curMod="";
+  for(let i=doc.headerRow+1;i<grid.length;i++){
+    const r = grid[i]||[];
+    const modRaw = (r[doc.modCol]!==undefined && r[doc.modCol]!==null) ? r[doc.modCol].toString().trim() : "";
+    const summRaw = (r[doc.summCol]!==undefined && r[doc.summCol]!==null) ? r[doc.summCol].toString().trim() : "";
+    const totalRaw = r[doc.totalCol];
+    if(modRaw && !/total/i.test(modRaw)) curMod = modRaw;
+    if(!summRaw) continue;
+    if(/total/i.test(summRaw)) continue;
+    const totalNum = typeof totalRaw === "number" ? totalRaw : parseFloat(totalRaw);
+    if(isNaN(totalNum)) continue;
+    const dbl = looksDoubled(summRaw);
+    rows.push({ modality: curMod, summary: summRaw, total: totalNum, double: dbl, category: classify(curMod, summRaw) });
+  }
+  doc.rows = rows;
+}
+
+function renderDoctors(){
+  const wrap = document.getElementById('doctorsWrap');
+  wrap.innerHTML = "";
+  doctors.forEach(doc=>{
+    const card = document.createElement('div');
+    card.className = 'doctor-card' + (doc.open ? ' open' : '');
+    const effTotal = doc.rows.reduce((a,r)=>a+(r.double?r.total*2:r.total),0);
+    const dblCount = doc.rows.filter(r=>r.double).length;
+
+    card.innerHTML = `
+      <div class="dhead" data-id="${doc.id}">
+        <div>
+          <div class="dtitle">${escapeHtml(doc.fileName)}</div>
+          <div class="dsub">تبويب البيانات: ${escapeHtml(doc.sheetName||'')} · ${doc.rows.length} فحص · إجمالي فعلي بعد المضاعفة: ${effTotal}</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;">
+          <button class="remove-x" data-remove="${doc.id}">إزالة</button>
+          <span class="chev">▾</span>
+        </div>
+      </div>
+      <div class="dbody" id="body-${doc.id}"></div>
+    `;
+    wrap.appendChild(card);
+    card.querySelector('.dhead').addEventListener('click', (e)=>{
+      if(e.target.closest('[data-remove]')) return;
+      doc.open = !doc.open;
+      renderDoctors();
+    });
+    card.querySelector('[data-remove]').addEventListener('click', (e)=>{
+      e.stopPropagation();
+      doctors = doctors.filter(d=>d.id!==doc.id);
+      renderDoctors();
+      if(kpiWB) renderKpiMatchTable();
+    });
+    if(doc.open){
+      renderDoctorBody(doc, card.querySelector('.dbody'));
+    }
+  });
+
+  if(doctors.length>0){
+    unlock('card-2');
+    activatePill(doctors.length>0 && !kpiWB ? 1 : 2);
+  }
+}
+
+function renderDoctorBody(doc, container){
+  // sheet tabs (if more than one sheet)
+  let sheetTabsHtml = "";
+  if(doc.sheetsList.length>1){
+    sheetTabsHtml = '<div class="sheet-tabs">' + doc.sheetsList.map(name=>
+      `<div class="sheet-tab ${name===doc.sheetName?'active':''}" data-sheet="${escapeHtml(name)}">${escapeHtml(name)}</div>`
+    ).join('') + '</div>';
+  }
+
+  container.innerHTML = `
+    ${sheetTabsHtml}
+    <div class="row">
+      <div class="field"><label>صف العناوين</label><input type="number" class="cfg-header" min="1" value="${doc.headerRow+1}"></div>
+      <div class="field"><label>عمود Modality</label><select class="cfg-mod"></select></div>
+      <div class="field"><label>عمود Summary</label><select class="cfg-summ"></select></div>
+      <div class="field"><label>عمود Total</label><select class="cfg-total"></select></div>
+      <button class="ghost small cfg-apply">إعادة الاستخراج</button>
+    </div>
+    <div class="tbl-scroll rows-table"></div>
+    <div class="summary-bar rows-summary"></div>
+  `;
+
+  // populate column selects
+  const ws = doc.wb.Sheets[doc.sheetName];
+  const grid = XLSX.utils.sheet_to_json(ws, {header:1, blankrows:false});
+  const maxCols = Math.max(grid.reduce((m,r)=>Math.max(m,r.length),1), 8);
+  ['cfg-mod','cfg-summ','cfg-total'].forEach((cls, idx)=>{
+    const sel = container.querySelector('.'+cls);
+    for(let c=0;c<maxCols;c++){
+      const opt=document.createElement('option'); opt.value=c; opt.textContent=colLetter(c);
+      sel.appendChild(opt);
+    }
+    const current = idx===0?doc.modCol:(idx===1?doc.summCol:doc.totalCol);
+    sel.value = current;
+  });
+
+  container.querySelectorAll('.sheet-tab').forEach(tab=>{
+    tab.addEventListener('click', ()=>{
+      doc.sheetName = tab.dataset.sheet;
+      detectColumnsForSheet(doc);
+      extractDoctorRows(doc);
+      renderDoctors();
+    });
+  });
+
+  container.querySelector('.cfg-apply').addEventListener('click', ()=>{
+    doc.headerRow = parseInt(container.querySelector('.cfg-header').value,10)-1;
+    doc.modCol = parseInt(container.querySelector('.cfg-mod').value,10);
+    doc.summCol = parseInt(container.querySelector('.cfg-summ').value,10);
+    doc.totalCol = parseInt(container.querySelector('.cfg-total').value,10);
+    extractDoctorRows(doc);
+    renderDoctors();
+  });
+
+  renderRowsTable(doc, container.querySelector('.rows-table'));
+  updateRowsSummary(doc, container.querySelector('.rows-summary'));
+}
+
+function renderRowsTable(doc, wrap){
+  let html = '<table><thead><tr><th>النمط</th><th>اسم الفحص</th><th>العدد</th><th>مضاعفة؟</th><th>الفئة (KPI)</th></tr></thead><tbody>';
+  doc.rows.forEach((row, idx)=>{
+    html += `<tr class="${row.double?'flag-row':''}">
+      <td>${escapeHtml(row.modality)}</td>
+      <td>${row.double?'<span class="flag-badge">AND/+</span>':''}${escapeHtml(row.summary)}</td>
+      <td class="num-cell">${row.total}</td>
+      <td><input type="checkbox" class="chk" data-idx="${idx}" ${row.double?'checked':''}></td>
+      <td><select class="cat-select" data-idx="${idx}"></select></td>
+    </tr>`;
+  });
+  html += '</tbody></table>';
+  wrap.innerHTML = html;
+
+  wrap.querySelectorAll('select.cat-select').forEach(sel=>{
+    const idx = parseInt(sel.dataset.idx,10);
+    CATEGORIES.forEach(cat=>{
+      const opt=document.createElement('option'); opt.value=cat; opt.textContent=cat;
+      if(cat===doc.rows[idx].category) opt.selected=true;
+      sel.appendChild(opt);
+    });
+    sel.addEventListener('change', ()=>{
+      doc.rows[idx].category = sel.value;
+      updateRowsSummary(doc, wrap.parentElement.querySelector('.rows-summary'));
+    });
+  });
+  wrap.querySelectorAll('input.chk').forEach(chk=>{
+    chk.addEventListener('change', ()=>{
+      const idx = parseInt(chk.dataset.idx,10);
+      doc.rows[idx].double = chk.checked;
+      updateRowsSummary(doc, wrap.parentElement.querySelector('.rows-summary'));
+      const titleEl = wrap.closest('.doctor-card').querySelector('.dsub');
+      const effTotal = doc.rows.reduce((a,r)=>a+(r.double?r.total*2:r.total),0);
+      titleEl.textContent = `تبويب البيانات: ${doc.sheetName} · ${doc.rows.length} فحص · إجمالي فعلي بعد المضاعفة: ${effTotal}`;
+    });
+  });
+}
+
+function updateRowsSummary(doc, el){
+  const totalExams = doc.rows.reduce((a,r)=>a+r.total,0);
+  const doubledCount = doc.rows.filter(r=>r.double).length;
+  const effectiveTotal = doc.rows.reduce((a,r)=>a+(r.double?r.total*2:r.total),0);
+  el.innerHTML =
+    `<div>سطور: <b>${doc.rows.length}</b></div>` +
+    `<div>إجمالي خام: <b>${totalExams}</b></div>` +
+    `<div>سطور مُضاعفة: <b>${doubledCount}</b></div>` +
+    `<div>إجمالي فعلي بعد المضاعفة: <b>${effectiveTotal}</b></div>`;
+}
+
+// ---------- Step 2: KPI file ----------
+const drop2 = document.getElementById('drop2');
+const fileKpi = document.getElementById('fileKpi');
+drop2.addEventListener('click', ()=>fileKpi.click());
+['dragover','dragleave','drop'].forEach(evt=>{
+  drop2.addEventListener(evt, e=>{ e.preventDefault(); drop2.classList.toggle('drag', evt==='dragover'); });
+});
+drop2.addEventListener('drop', e=>{ if(e.dataTransfer.files.length) handleKpiFile(e.dataTransfer.files[0]); });
+fileKpi.addEventListener('change', e=>{ if(e.target.files.length) handleKpiFile(e.target.files[0]); });
+
+function handleKpiFile(file){
+  kpiFileName = file.name;
+  document.getElementById('fname2').textContent = file.name;
+  const reader = new FileReader();
+  reader.onload = e=>{
+    try{
+      const data = new Uint8Array(e.target.result);
+      kpiWB = XLSX.read(data, {type:'array', cellFormula:true});
+      matchAllDoctorsToKpi();
+      renderKpiMatchTable();
+      unlock('card-3');
+      activatePill(2);
+    }catch(err){
+      alert("تعذّرت قراءة ملف KPI: " + err.message);
+    }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function matchAllDoctorsToKpi(){
+  doctors.forEach(doc=>{
+    if(!doc.kpiSheetName || !kpiWB.SheetNames.includes(doc.kpiSheetName)){
+      doc.kpiSheetName = guessKpiSheet(doc.fileName, kpiWB.SheetNames);
+    }
+  });
+}
+
+function renderKpiMatchTable(){
+  const wrap = document.getElementById('kpiMatchTableWrap');
+  if(doctors.length===0){
+    wrap.innerHTML = '<div class="note">ارفع ملفات الأطباء أولاً في الخطوة 1.</div>';
+    document.getElementById('kpiMatchWrap').style.display='block';
+    return;
+  }
+  let html = '<table><thead><tr><th>ملف الطبيب</th><th>التبويب المطابق في KPI</th></tr></thead><tbody>';
+  doctors.forEach(doc=>{
+    html += `<tr><td>${escapeHtml(doc.fileName)}</td><td><select class="kpi-sheet-sel" data-id="${doc.id}"></select></td></tr>`;
+  });
+  html += '</tbody></table>';
+  wrap.innerHTML = html;
+  wrap.querySelectorAll('.kpi-sheet-sel').forEach(sel=>{
+    const doc = doctors.find(d=>d.id===sel.dataset.id);
+    kpiWB.SheetNames.forEach(name=>{
+      const opt=document.createElement('option'); opt.value=name; opt.textContent=name;
+      if(name===doc.kpiSheetName) opt.selected=true;
+      sel.appendChild(opt);
+    });
+    sel.addEventListener('change', ()=>{ doc.kpiSheetName = sel.value; });
+  });
+  document.getElementById('kpiMatchWrap').style.display='block';
+}
+
+// ---------- Step 3: compute & reconcile ----------
+document.getElementById('btnComputeAll').addEventListener('click', computeAllDoctors);
+
+function locateKpiTable(ws){
+  const range = XLSX.utils.decode_range(ws['!ref']);
+  let modCell = null;
+  for(let r=range.s.r; r<=Math.min(range.e.r, range.s.r+40); r++){
+    for(let c=range.s.c; c<=range.e.c; c++){
+      const cell = ws[XLSX.utils.encode_cell({r,c})];
+      if(cell && cell.v && cell.v.toString().trim().toLowerCase()==="modality"){ modCell={r,c}; break; }
+    }
+    if(modCell) break;
+  }
+  if(!modCell) return null;
+  let valueCol = null;
+  for(let c=range.s.c;c<=range.e.c;c++){
+    const cell = ws[XLSX.utils.encode_cell({r:modCell.r, c})];
+    if(cell && cell.v && cell.v.toString().toLowerCase().includes("monthly") && cell.v.toString().toLowerCase().includes("perform")){ valueCol=c; break; }
+  }
+  if(valueCol===null){
+    for(let c=range.s.c;c<=range.e.c;c++){
+      const cell = ws[XLSX.utils.encode_cell({r:modCell.r+1, c})];
+      if(cell && cell.v && cell.v.toString().toLowerCase().includes("monthly") && cell.v.toString().toLowerCase().includes("perform")){ valueCol=c; break; }
+    }
+  }
+  if(valueCol===null) return null;
+  return {headerRow:modCell.r, labelCol:modCell.c, valueCol};
+}
+
+function computeAllDoctors(){
+  const resultsWrap = document.getElementById('perDoctorResults');
+  resultsWrap.innerHTML = "";
+  let grandEffective = 0, grandWritten = 0, anyMismatch = false;
+
+  doctors.forEach(doc=>{
+    const ws = kpiWB.Sheets[doc.kpiSheetName];
+    const box = document.createElement('div');
+    box.className = 'card';
+    box.style.margin = '0 0 14px';
+    box.style.padding = '16px 18px';
+
+    if(!ws){
+      box.innerHTML = `<h2 style="font-size:0.95rem">${escapeHtml(doc.fileName)}</h2><div class="error">التبويب "${escapeHtml(doc.kpiSheetName||'')}" غير موجود في ملف KPI.</div>`;
+      resultsWrap.appendChild(box);
+      anyMismatch = true;
+      return;
+    }
+    const info = locateKpiTable(ws);
+    if(!info){
+      box.innerHTML = `<h2 style="font-size:0.95rem">${escapeHtml(doc.fileName)}</h2><div class="error">تعذّر العثور على جدول Monthly Performed في تبويب "${escapeHtml(doc.kpiSheetName)}".</div>`;
+      resultsWrap.appendChild(box);
+      anyMismatch = true;
+      return;
+    }
+
+    // sums per category (effective, after doubling)
+    const sums = {};
+    doc.rows.forEach(r=>{
+      const eff = r.double ? r.total*2 : r.total;
+      sums[r.category] = (sums[r.category]||0) + eff;
+    });
+    const effectiveTotal = Object.values(sums).reduce((a,b)=>a+b,0);
+
+    const computed = {};
+    for(let rIdx=info.headerRow+1; rIdx<=info.headerRow+60; rIdx++){
+      const labelCell = ws[XLSX.utils.encode_cell({r:rIdx, c:info.labelCol})];
+      if(!labelCell || labelCell.v===undefined || labelCell.v===null) continue;
+      const label = normLabel(labelCell.v.toString());
+      const catIdx = CAT_NORM.indexOf(label);
+      if(catIdx===-1) continue;
+      const cat = CATEGORIES[catIdx];
+      const valCell = ws[XLSX.utils.encode_cell({r:rIdx, c:info.valueCol})];
+      const oldVal = valCell ? valCell.v : null;
+      computed[cat] = { row: rIdx, old: (typeof oldVal==='number')?oldVal:null, newVal: sums.hasOwnProperty(cat)?sums[cat]:null };
+    }
+    const unmatched = Object.keys(sums).filter(cat=>!computed[cat]);
+    const writtenTotal = Object.values(computed).reduce((a,c)=>a+(c.newVal||0),0);
+
+    doc.computed = { table: computed, meta:{labelCol:info.labelCol, valueCol:info.valueCol}, effectiveTotal, writtenTotal, unmatched };
+
+    grandEffective += effectiveTotal;
+    grandWritten += writtenTotal;
+    const matchOk = (effectiveTotal === writtenTotal) && unmatched.length===0;
+    if(!matchOk) anyMismatch = true;
+
+    let previewRows = '';
+    CATEGORIES.forEach(cat=>{
+      const c = computed[cat];
+      if(!c) return;
+      const oldV = c.old===null?'—':c.old;
+      const newV = c.newVal===null?'—':c.newVal;
+      let diffHtml='—', diffClass='diff-same';
+      if(c.old!==null && c.newVal!==null){
+        const d=c.newVal-c.old; diffClass=d>0?'diff-up':(d<0?'diff-down':'diff-same'); diffHtml=(d>0?'+':'')+d;
+      } else if(c.newVal!==null && c.old===null){ diffHtml='جديد'; diffClass='diff-up'; }
+      previewRows += `<tr><td>${cat}</td><td class="num-cell">${oldV}</td><td class="num-cell">${newV}</td><td class="num-cell ${diffClass}">${diffHtml}</td></tr>`;
+    });
+
+    box.innerHTML = `
+      <h2 style="font-size:0.95rem">${escapeHtml(doc.fileName)} <span style="color:var(--sub);font-weight:400">→ ${escapeHtml(doc.kpiSheetName)}</span></h2>
+      <div class="tbl-scroll"><table><thead><tr><th>الفئة</th><th>القيمة الحالية</th><th>القيمة الجديدة</th><th>الفرق</th></tr></thead><tbody>${previewRows}</tbody></table></div>
+      <div class="summary-bar">
+        <div>إجمالي بعد المضاعفة: <b>${effectiveTotal}</b></div>
+        <div>إجمالي مكتوب في KPI: <b>${writtenTotal}</b></div>
+        <div>التحقق: <span class="${matchOk?'check-pass':'check-fail'}">${matchOk?'✓ متطابق':'✗ غير متطابق'}</span></div>
+      </div>
+      ${unmatched.length? `<div class="warn">فئات لا يوجد لها صف مطابق في تبويب KPI (لم يتم كتابتها): ${unmatched.map(escapeHtml).join('، ')}</div>` : ''}
+    `;
+    resultsWrap.appendChild(box);
+  });
+
+  const gt = document.getElementById('grandTotal');
+  const gtOk = (grandEffective === grandWritten) && !anyMismatch;
+  gt.style.display = 'block';
+  gt.innerHTML = `
+    <div class="gt-row"><span>إجمالي كل الأطباء بعد المضاعفة</span><b>${grandEffective}</b></div>
+    <div class="gt-row"><span>إجمالي القيم الجديدة المكتوبة في KPI</span><b>${grandWritten}</b></div>
+    <div class="gt-row"><span>حالة المطابقة الإجمالية</span><b class="${gtOk?'check-pass':'check-fail'}">${gtOk?'✓ متطابقة بالكامل':'✗ يوجد فرق — راجع التحذيرات أعلاه'}</b></div>
+  `;
+
+  unlock('card-4');
+  activatePill(3);
+}
+
+// ---------- Step 4: download ----------
+document.getElementById('btnDownload').addEventListener('click', downloadResult);
+
+function downloadResult(){
+  doctors.forEach(doc=>{
+    if(!doc.computed) return;
+    const ws = kpiWB.Sheets[doc.kpiSheetName];
+    if(!ws) return;
+    const valueCol = doc.computed.meta.valueCol;
+    CATEGORIES.forEach(cat=>{
+      const info = doc.computed.table[cat];
+      if(!info || info.newVal===null) return;
+      const ref = XLSX.utils.encode_cell({r:info.row, c:valueCol});
+      if(ws[ref]){ ws[ref].v = info.newVal; ws[ref].t='n'; delete ws[ref].f; delete ws[ref].w; }
+      else { ws[ref] = {t:'n', v: info.newVal}; }
+    });
+  });
+
+  kpiWB.Workbook = kpiWB.Workbook || {};
+  kpiWB.Workbook.CalcPr = { fullCalcOnLoad: true };
+
+  const wbout = XLSX.write(kpiWB, {bookType:'xlsx', type:'array'});
+  const blob = new Blob([wbout], {type:'application/octet-stream'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = "KPI_Doctors_updated.xlsx";
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+
+  const successEl = document.getElementById('downloadSuccess');
+  successEl.textContent = `تم تحديث ${doctors.length} تبويب طبيب وتنزيل الملف. افتحه في Excel للتأكد من إعادة حساب الصيغ.`;
+  successEl.style.display='block';
+  activatePill(4);
+}
+</script>
+</body>
+</html>
